@@ -1,0 +1,19 @@
+[package]
+name = "mbit"
+version = "0.1.0"
+edition = "2021"
+description = "MoonBit Component Model 通用构建和运行工具"
+license = "MIT"
+
+[[bin]]
+name = "mbit"
+path = "src/main.rs"
+
+[lib]
+name = "mbit"
+path = "src/lib.rs"
+
+[dependencies]
+wasmtime = { version = "46", features = ["component-model"] }
+wasmtime-wasi = "46"
+anyhow = "1"

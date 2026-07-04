@@ -1,0 +1,45 @@
+# Rust 构建产物
+/target/
+**/*.rs.bk
+
+# MoonBit 构建产物
+/_build/
+/gen/
+/world/
+/.mooncakes/
+moon.mod.json
+
+# WASM 构建产物
+*.wasm
+!src/**/*.wasm
+
+# 交叉编译产物
+**/*.dSYM/
+**/*.pdb
+
+# IDE 和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 调试文件
+*.dwp
+*.dwo
+
+# 日志和临时文件
+*.log
+*.tmp
+*.temp
+tmp/
+
+# 测试覆盖率
+*.gcov
+*.lcov
+coverage/
+
+# 环境变量
+.env
+.env.local
