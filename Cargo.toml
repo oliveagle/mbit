@@ -2,7 +2,7 @@
 name = "mbit"
 version = "0.1.0"
 edition = "2021"
-description = "MoonBit Component Model 通用构建和运行工具"
+description = "MoonBit WASM 构建 + 运行公共 runtime"
 license = "MIT"
 
 [[bin]]
@@ -14,6 +14,12 @@ name = "mbit"
 path = "src/lib.rs"
 
 [dependencies]
-wasmtime = { version = "46", features = ["component-model"] }
+# 全部用 crate API；不 spawn moon 之外的编译工具链
+# gc feature 必须开：MoonBit 编译产物用 externref 传 host 句柄
+wasmtime = { version = "46", features = ["gc"] }
 wasmtime-wasi = "46"
 anyhow = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

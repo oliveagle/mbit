@@ -1,9 +1,12 @@
-// mbit - MoonBit Component Model 通用构建和运行工具
+// mbit - MoonBit WASM 构建 + 运行工具（公共 runtime）
 //
-// CLI 入口，核心逻辑在 mbit library 中。
+// 编译：moon CLI（不可避免） + wasmtime crate 验证
+// 运行：wasmtime crate + 自定义 host imports
+//
+// 全部用 crate API；不 spawn moon 之外的编译工具链 CLI。
 
 use anyhow::Result;
-use mbit::Builder;
+use mbit::{Builder, McpConfig, Transport};
 use std::path::PathBuf;
 
 fn main() -> Result<()> {
@@ -11,7 +14,6 @@ fn main() -> Result<()> {
 
     match args.get(1).map(|s| s.as_str()) {
         Some("build") => {
-            let standalone = args.iter().any(|a| a == "--standalone" || a == "-s");
             let debug = args.iter().any(|a| a == "--debug" || a == "-d");
             let target = args
                 .iter()
@@ -19,11 +21,10 @@ fn main() -> Result<()> {
                 .and_then(|i| args.get(i + 1))
                 .cloned();
 
-            let mut builder = Builder::new().standalone(standalone).release(!debug);
+            let mut builder = Builder::new().release(!debug);
             if let Some(t) = target {
                 builder = builder.target(t);
             }
-
             let project_dir = std::env::current_dir()?;
             mbit::build(&project_dir, &builder.build_config())
         }
@@ -31,6 +32,48 @@ fn main() -> Result<()> {
             let project_dir = std::env::current_dir()?;
             let wasm_path = args.get(2).map(PathBuf::from);
             mbit::run(&project_dir, wasm_path.as_deref())
+        }
+        Some("mcp") => {
+            let transport = if args.iter().any(|a| a == "--stdio") {
+                Transport::Stdio
+            } else if args.iter().any(|a| a == "--sse") {
+                Transport::Sse
+            } else {
+                anyhow::bail!("必须指定传输模式: --stdio 或 --sse");
+            };
+
+            let port: u16 = args
+                .iter()
+                .position(|a| a == "--port" || a == "-p")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(8080);
+
+            let host = args
+                .iter()
+                .position(|a| a == "--host" || a == "-H")
+                .and_then(|i| args.get(i + 1).cloned())
+                .unwrap_or_else(|| "127.0.0.1".to_string());
+
+            let bridge_command = args
+                .iter()
+                .position(|a| a == "--bridge-cmd" || a == "-b")
+                .and_then(|i| args.get(i + 1).cloned())
+                .unwrap_or_else(|| "br".to_string());
+
+            let wasm_path = args
+                .iter()
+                .skip(2)
+                .find(|a| !a.starts_with("--") && !a.starts_with("-"))
+                .map(PathBuf::from)
+                .ok_or_else(|| anyhow::anyhow!("必须提供 wasm 文件路径"))?;
+
+            let mut config = McpConfig::stdio(wasm_path);
+            config.bridge_command = bridge_command;
+            if transport == Transport::Sse {
+                config = config.sse(host, port);
+            }
+            mbit::run_mcp(config)
         }
         Some("test") => {
             let project_dir = std::env::current_dir()?;
@@ -56,33 +99,30 @@ fn main() -> Result<()> {
 }
 
 fn print_help() {
-    println!("mbit - MoonBit Component Model 通用构建和运行工具");
+    println!("mbit - MoonBit WASM 构建 + 运行工具");
+    println!();
+    println!("编译: moon CLI (不可避免) + wasmtime crate 验证");
+    println!("运行: wasmtime crate + 自定义 host imports (externref handle 桥接)");
     println!();
     println!("用法:");
-    println!("  mbit build                        编译 wit/ + src/ → target/component.wasm (默认 release)");
-    println!("  mbit build --debug                Debug 模式编译");
-    println!("  mbit build --standalone           生成独立可执行文件 (默认 release 模式)");
-    println!("  mbit build --standalone --debug   Debug 模式生成独立二进制");
-    println!("  mbit build --standalone --target <triple>  交叉编译到指定平台");
-    println!("  mbit run [wasm]                   运行 component (默认 target/component.wasm)");
-    println!("  mbit test [args...]               运行测试 (透传给 moon test)");
-    println!("  mbit bench [args...]              运行基准测试 (透传给 moon bench)");
+    println!("  mbit build [options]                       编译当前 MoonBit 项目");
+    println!("  mbit build --debug                         Debug 模式编译");
+    println!("  mbit build --target <triple>               交叉编译到指定平台");
+    println!("  mbit run [wasm]                            加载 wasm 并调用 _start/run()");
+    println!("  mbit mcp --stdio [options] <wasm>          以 stdio MCP 服务器运行");
+    println!("  mbit mcp --sse   [options] <wasm>          以 HTTP+SSE MCP 服务器运行（简化）");
+    println!("  mbit test [args...]                        运行测试 (透传给 moon test)");
+    println!("  mbit bench [args...]                       运行基准测试 (透传给 moon bench)");
     println!();
-    println!("测试选项 (moon test):");
-    println!("  -f, --filter <pattern>            按名称过滤测试");
-    println!("  -p, --package <package>           指定包");
-    println!("  --release                         Release 模式");
-    println!("  --enable-coverage                 启用覆盖率");
-    println!("  -u, --update                      更新测试快照");
+    println!("mcp 选项:");
+    println!("  --stdio                  stdio JSON-RPC 传输");
+    println!("  --sse                    HTTP + Server-Sent Events 传输");
+    println!("  -p, --port <port>        SSE 监听端口 (默认 8080)");
+    println!("  -H, --host <host>        SSE 监听地址 (默认 127.0.0.1)");
+    println!("  -b, --bridge-cmd <cmd>   br 子进程命令 (默认 br)");
     println!();
-    println!("交叉编译目标示例:");
-    println!("  x86_64-unknown-linux-gnu          Linux x86_64");
-    println!("  aarch64-unknown-linux-gnu         Linux ARM64");
-    println!("  x86_64-pc-windows-gnu             Windows x86_64");
-    println!("  x86_64-apple-darwin               macOS x86_64");
-    println!("  aarch64-apple-darwin              macOS ARM64 (Apple Silicon)");
-    println!();
-    println!("交叉编译前提:");
-    println!("  安装 cross: cargo install cross");
-    println!("  安装 Docker 或 Podman");
+    println!("典型工作流:");
+    println!("  1. cd your-moonbit-project");
+    println!("  2. mbit build                # → target/<pkg>.wasm");
+    println!("  3. mbit mcp --stdio target/<pkg>.wasm");
 }

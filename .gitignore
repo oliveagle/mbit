@@ -43,3 +43,14 @@ coverage/
 # 环境变量
 .env
 .env.local
+
+# AI 编辑器 / Agent 工具产物
+/.agents/
+/.aider-desk/
+/.crush/
+/.goose/
+/.iflow/
+/.kilocode/
+/.qwen/
+/.roo/
+/skills-lock.json

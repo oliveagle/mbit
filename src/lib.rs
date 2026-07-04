@@ -1,13 +1,16 @@
-// mbit library - MoonBit Component Model 构建和运行库
+// mbit library - MoonBit WASM 运行 + 构建库
 //
-// 提供构建、运行、测试 MoonBit WASM 组件的功能。
-// 可作为库在其他 Rust 项目中使用。
+// 全部使用 crate API（wasmtime + wasmtime-wasi p1），
+// 只 spawn moon CLI（MoonBit 项目自己的编译器，没有 Rust crate 替代品）。
+// 不 spawn wasm-tools / wit-bindgen / cargo 等其他编译工具链 CLI。
 
 mod build;
+mod mcp;
 mod runner;
 mod test_bench;
 
 pub use build::{build, BuildConfig, Builder};
+pub use mcp::{run_mcp, McpConfig, Transport};
 pub use runner::{run, Runner};
 pub use test_bench::{bench, test};
 
