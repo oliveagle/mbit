@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    let quiet = args.iter().any(|a| a == "--quiet" || a == "-q");
 
     match args.get(1).map(|s| s.as_str()) {
         Some("build") => {
@@ -21,7 +22,7 @@ fn main() -> Result<()> {
                 .and_then(|i| args.get(i + 1))
                 .cloned();
 
-            let mut builder = Builder::new().release(!debug);
+            let mut builder = Builder::new().release(!debug).quiet(quiet);
             if let Some(t) = target {
                 builder = builder.target(t);
             }
@@ -61,15 +62,18 @@ fn main() -> Result<()> {
                 .and_then(|i| args.get(i + 1).cloned())
                 .unwrap_or_else(|| "br".to_string());
 
+            // wasm 路径 = 最后一个非 flag 参数（允许 flags 出现在路径之前或之后）
             let wasm_path = args
                 .iter()
                 .skip(2)
-                .find(|a| !a.starts_with("--") && !a.starts_with("-"))
+                .filter(|a| !a.starts_with("--") && !a.starts_with("-"))
+                .next_back()
                 .map(PathBuf::from)
                 .ok_or_else(|| anyhow::anyhow!("必须提供 wasm 文件路径"))?;
 
             let mut config = McpConfig::stdio(wasm_path);
             config.bridge_command = bridge_command;
+            config.quiet = quiet;
             if transport == Transport::Sse {
                 config = config.sse(host, port);
             }
@@ -103,6 +107,9 @@ fn print_help() {
     println!();
     println!("编译: moon CLI (不可避免) + wasmtime crate 验证");
     println!("运行: wasmtime crate + 自定义 host imports (externref handle 桥接)");
+    println!();
+    println!("全局选项:");
+    println!("  -q, --quiet                抑制 stderr 进度日志");
     println!();
     println!("用法:");
     println!("  mbit build [options]                       编译当前 MoonBit 项目");

@@ -19,7 +19,16 @@ path = "src/lib.rs"
 wasmtime = { version = "46", features = ["gc"] }
 wasmtime-wasi = "46"
 anyhow = "1"
+# 比 std::sync::Mutex 快，无 poisoning
+parking_lot = "0.12"
 
 [profile.release]
+opt-level = 3
 lto = "thin"
 codegen-units = 1
+strip = "debuginfo"
+
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true

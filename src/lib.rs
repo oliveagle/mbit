@@ -5,6 +5,7 @@
 // 不 spawn wasm-tools / wit-bindgen / cargo 等其他编译工具链 CLI。
 
 mod build;
+mod sse;
 mod mcp;
 mod runner;
 mod test_bench;

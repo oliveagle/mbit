@@ -10,6 +10,13 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+macro_rules! bprintln {
+    ($cfg:expr, $($arg:tt)*) => {
+        if !$cfg.quiet { println!($($arg)*); }
+    };
+}
+
+
 /// 构建配置
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
@@ -17,6 +24,8 @@ pub struct BuildConfig {
     pub release: bool,
     /// 交叉编译目标平台 (e.g. "x86_64-unknown-linux-gnu")
     pub target: Option<String>,
+    /// 安静模式：抑制 stdout 进度日志
+    pub quiet: bool,
 }
 
 impl Default for BuildConfig {
@@ -24,6 +33,7 @@ impl Default for BuildConfig {
         Self {
             release: true,
             target: None,
+            quiet: false,
         }
     }
 }
@@ -54,6 +64,10 @@ impl Builder {
         self.config.target = Some(target.into());
         self
     }
+    pub fn quiet(mut self, quiet: bool) -> Self {
+        self.config.quiet = quiet;
+        self
+    }
 
     pub fn build_config(self) -> BuildConfig {
         self.config
@@ -72,8 +86,8 @@ pub fn build(project_dir: impl AsRef<Path>, config: &BuildConfig) -> Result<()> 
     let target_dir = project_dir.join("target");
     let src_dir = project_dir.join("src");
 
-    println!("=== mbit build ===");
-    println!("项目目录: {}", project_dir.display());
+    bprintln!(config, "=== mbit build ===");
+    bprintln!(config, "项目目录: {}", project_dir.display());
 
     if !src_dir.exists() {
         anyhow::bail!("找不到 src/ 目录");
@@ -81,7 +95,7 @@ pub fn build(project_dir: impl AsRef<Path>, config: &BuildConfig) -> Result<()> 
     std::fs::create_dir_all(&target_dir)?;
 
     // 1. 调用 moon 编译 MoonBit → core wasm
-    println!("\n[1/4] moon build --target wasm");
+    bprintln!(config, "\n[1/4] moon build --target wasm");
     let mut cmd = Command::new("moon");
     cmd.arg("build").arg("--target").arg("wasm");
     if config.release {
@@ -101,29 +115,29 @@ pub fn build(project_dir: impl AsRef<Path>, config: &BuildConfig) -> Result<()> 
     }
 
     // 2. 找到编译产物
-    println!("[2/4] 定位编译产物");
+    bprintln!(config, "[2/4] 定位编译产物");
     let mode = if config.release { "release" } else { "debug" };
     let core_wasm = find_built_wasm(project_dir, mode)?;
-    println!("  core wasm: {}", core_wasm.display());
+    bprintln!(config, "  core wasm: {}", core_wasm.display());
 
     // 3. 复制到 target/ 目录
-    println!("[3/4] 复制到 target/");
+    bprintln!(config, "[3/4] 复制到 target/");
     let file_name = core_wasm
         .file_name()
         .ok_or_else(|| anyhow::anyhow!("无法取产物文件名"))?;
     let target_wasm = target_dir.join(file_name);
     std::fs::copy(&core_wasm, &target_wasm)?;
-    println!("  output: {}", target_wasm.display());
+    bprintln!(config, "  output: {}", target_wasm.display());
 
     // 4. 用 wasmtime 验证 module 可加载
-    println!("[4/4] wasmtime 验证 module 可加载");
+    bprintln!(config, "[4/4] wasmtime 验证 module 可加载");
     let engine = wasmtime::Engine::new(wasmtime::Config::new().wasm_gc(true))?;
     let _module = wasmtime::Module::from_file(&engine, &target_wasm)
         .map_err(|e| anyhow::anyhow!("wasmtime 无法加载 module: {}", e))?;
-    println!("  验证通过");
+    bprintln!(config, "  验证通过");
 
-    println!("\n✓ 构建完成");
-    println!("  运行 MCP: mbit mcp --stdio {}", target_wasm.display());
+    bprintln!(config, "\n✓ 构建完成");
+    bprintln!(config, "  运行 MCP: mbit mcp --stdio {}", target_wasm.display());
 
     Ok(())
 }
